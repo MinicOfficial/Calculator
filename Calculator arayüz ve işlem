@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Hesap Makinesi</title>
+<style>
+  :root{
+    --bg: #0B1E1C;
+    --panel: #0F2724;
+    --display-fg: #EAF6F3;
+    --sub-fg: #6FA79C;
+    --key-fn: #14332F;
+    --key-fn-fg: #7FE0C8;
+    --key-num: #123330;
+    --key-num-fg: #EAF6F3;
+    --key-op: #163A35;
+    --key-op-fg: #4FE3C1;
+    --key-eq: #4FE3C1;
+    --key-eq-fg: #08201C;
+    --key-pressed: #1C4741;
+    --divider: rgba(127, 224, 200, 0.08);
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    font-family: 'Space Grotesk', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+  }
+
+  .calculator {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    max-width: 480px;
+    margin: 0 auto;
+    background: var(--panel);
+  }
+
+  .display {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: flex-end;
+    padding: 24px 24px 16px;
+    min-height: 140px;
+    overflow: hidden;
+  }
+
+  .history {
+    color: var(--sub-fg);
+    font-size: 16px;
+    font-weight: 400;
+    letter-spacing: 0.3px;
+    min-height: 22px;
+    margin-bottom: 6px;
+    opacity: 0.85;
+    word-break: break-all;
+    text-align: right;
+  }
+
+  .current {
+    color: var(--display-fg);
+    font-size: clamp(32px, 11vw, 56px);
+    font-weight: 300;
+    letter-spacing: 0.5px;
+    line-height: 1.1;
+    word-break: break-all;
+    text-align: right;
+    transition: font-size 0.15s ease;
+  }
+
+  .keys {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(6, 1fr);
+    gap: 1px;
+    background: var(--divider);
+    border-top: 1px solid var(--divider);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  button {
+    border: none;
+    outline: none;
+    background: var(--key-num);
+    color: var(--key-num-fg);
+    font-family: inherit;
+    font-size: 24px;
+    font-weight: 400;
+    padding: 22px 0;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.08s ease;
+  }
+
+  button:active {
+    background: var(--key-pressed);
+  }
+
+  .fn {
+    background: var(--key-fn);
+    color: var(--key-fn-fg);
+    font-size: 21px;
+  }
+
+  .op {
+    background: var(--key-op);
+    color: var(--key-op-fg);
+    font-size: 26px;
+    font-weight: 500;
+  }
+
+  .eq {
+    background: var(--key-eq);
+    color: var(--key-eq-fg);
+    font-size: 28px;
+    font-weight: 600;
+    grid-row: span 1;
+  }
+
+  .zero {
+    grid-column: span 2;
+  }
+
+  .op.active {
+    background: var(--key-eq);
+    color: var(--key-eq-fg);
+  }
+
+  .note {
+    text-align: center;
+    color: var(--sub-fg);
+    font-size: 11px;
+    padding: 6px 0;
+    opacity: 0.6;
+    letter-spacing: 0.4px;
+    background: var(--panel);
+  }
+</style>
+</head>
+<body>
+
+<div class="calculator">
+  <div class="display">
+    <div class="history" id="history"></div>
+    <div class="current" id="current">0</div>
+  </div>
+
+  <div class="keys">
+    <button class="fn" data-action="clear">C</button>
+    <button class="fn" data-action="sign">+/-</button>
+    <button class="fn" data-action="percent">%</button>
+    <button class="op" data-action="divide">÷</button>
+
+    <button data-action="num" data-value="7">7</button>
+    <button data-action="num" data-value="8">8</button>
+    <button data-action="num" data-value="9">9</button>
+    <button class="op" data-action="multiply">×</button>
+
+    <button data-action="num" data-value="4">4</button>
+    <button data-action="num" data-value="5">5</button>
+    <button data-action="num" data-value="6">6</button>
+    <button class="op" data-action="subtract">−</button>
+
+    <button data-action="num" data-value="1">1</button>
+    <button data-action="num" data-value="2">2</button>
+    <button data-action="num" data-value="3">3</button>
+    <button class="op" data-action="add">+</button>
+
+    <button class="zero" data-action="num" data-value="0">0</button>
+    <button data-action="decimal">,</button>
+    <button class="eq" data-action="equals">=</button>
+  </div>
+
+  <div class="note">999.000.000.000'a kadar işlem desteklenir</div>
+</div>
+
+<script>
+(function () {
+  const LIMIT = 999000000000; // desteklenen maksimum basamak/işlem sınırı (999 milyar)
+  const currentEl = document.getElementById('current');
+  const historyEl = document.getElementById('history');
+
+  let current = '0';
+  let previous = null;
+  let operator = null;
+  let overwrite = true;
+
+  function formatNumber(numStr) {
+    if (numStr === '' || numStr === '-' ) return numStr;
+    let neg = numStr.startsWith('-');
+    if (neg) numStr = numStr.slice(1);
+    let [intPart, decPart] = numStr.split(',');
+    intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    let result = intPart + (decPart !== undefined ? ',' + decPart : '');
+    return (neg ? '-' : '') + result;
+  }
+
+  function render() {
+    currentEl.textContent = formatNumber(current);
+    if (operator && previous !== null) {
+      const opSymbol = { add: '+', subtract: '−', multiply: '×', divide: '÷' }[operator];
+      historyEl.textContent = formatNumber(previous) + ' ' + opSymbol;
+    } else {
+      historyEl.textContent = '';
+    }
+    // Ekrana sığdırmak için basamak sayısına göre font küçültme
+    const len = currentEl.textContent.length;
+    if (len > 15) {
+      currentEl.style.fontSize = '22px';
+    } else if (len > 12) {
+      currentEl.style.fontSize = '26px';
+    } else if (len > 9) {
+      currentEl.style.fontSize = '34px';
+    } else {
+      currentEl.style.fontSize = '';
+    }
+  }
+
+  function clearAll() {
+    current = '0';
+    previous = null;
+    operator = null;
+    overwrite = true;
+    render();
+  }
+
+  function inputDigit(d) {
+    if (overwrite) {
+      current = d === '0' ? '0' : d;
+      overwrite = false;
+    } else {
+      if (current === '0') current = d;
+      else current += d;
+    }
+    // basamak sayısı sınırı: toplamda 12 basamağa kadar (999.000.000.000 dahil)
+    const digitsOnly = current.replace('-', '').replace(',', '');
+    if (digitsOnly.length > 12) {
+      current = current.slice(0, -1);
+    }
+    render();
+  }
+
+  function inputDecimal() {
+    if (overwrite) {
+      current = '0,';
+      overwrite = false;
+      render();
+      return;
+    }
+    if (!current.includes(',')) {
+      current += ',';
+      render();
+    }
+  }
+
+  function toggleSign() {
+    if (current === '0') return;
+    current = current.startsWith('-') ? current.slice(1) : '-' + current;
+    render();
+  }
+
+  function applyPercent() {
+    const val = parseFloat(current.replace(',', '.'));
+    if (isNaN(val)) return;
+    const result = val / 100;
+    current = String(result).replace('.', ',');
+    render();
+  }
+
+  function chooseOperator(op) {
+    if (operator && !overwrite) {
+      compute();
+    }
+    previous = current;
+    operator = op;
+    overwrite = true;
+    render();
+  }
+
+  function compute() {
+    if (operator === null || previous === null) return;
+    const a = parseFloat(previous.replace(',', '.'));
+    const b = parseFloat(current.replace(',', '.'));
+    if (isNaN(a) || isNaN(b)) return;
+
+    let result;
+    switch (operator) {
+      case 'add': result = a + b; break;
+      case 'subtract': result = a - b; break;
+      case 'multiply': result = a * b; break;
+      case 'divide':
+        if (b === 0) {
+          current = 'Hata';
+          previous = null;
+          operator = null;
+          overwrite = true;
+          render();
+          return;
+        }
+        result = a / b;
+        break;
+      default: return;
+    }
+
+    // 1.000.000 sınırını aşan sonuçları sınırla
+    if (Math.abs(result) > LIMIT) {
+      result = result > 0 ? LIMIT : -LIMIT;
+    }
+
+    // gereksiz ondalık basamaklarını temizle, en fazla 6 ondalık basamak göster
+    result = Math.round(result * 1e6) / 1e6;
+
+    current = String(result).replace('.', ',');
+    previous = null;
+    operator = null;
+    overwrite = true;
+    render();
+  }
+
+  document.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const action = btn.dataset.action;
+      document.querySelectorAll('.op').forEach(b => b.classList.remove('active'));
+
+      switch (action) {
+        case 'num': inputDigit(btn.dataset.value); break;
+        case 'decimal': inputDecimal(); break;
+        case 'clear': clearAll(); break;
+        case 'sign': toggleSign(); break;
+        case 'percent': applyPercent(); break;
+        case 'add':
+        case 'subtract':
+        case 'multiply':
+        case 'divide':
+          chooseOperator(action);
+          btn.classList.add('active');
+          break;
+        case 'equals': compute(); break;
+      }
+    });
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key >= '0' && e.key <= '9') inputDigit(e.key);
+    else if (e.key === '.' || e.key === ',') inputDecimal();
+    else if (e.key === '+') chooseOperator('add');
+    else if (e.key === '-') chooseOperator('subtract');
+    else if (e.key === '*') chooseOperator('multiply');
+    else if (e.key === '/') { e.preventDefault(); chooseOperator('divide'); }
+    else if (e.key === 'Enter' || e.key === '=') compute();
+    else if (e.key === 'Escape') clearAll();
+    else if (e.key === 'Backspace') {
+      if (!overwrite && current.length > 1) {
+        current = current.slice(0, -1);
+      } else {
+        current = '0';
+        overwrite = true;
+      }
+      render();
+    }
+  });
+
+  render();
+})();
+</script>
+
+</body>
+</html>
